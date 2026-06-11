@@ -1,0 +1,2 @@
+# Practika
+Practika hapaev Kanamat
