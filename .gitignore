@@ -24,3 +24,11 @@ runs/
 
 # but keep final best weight
 !results/trash_detector-4/weights/best.pt
+
+# converted dataset (very large)
+data_coco_yolo/
+
+# predictions and training runs
+results/predict*/
+results/trash_coco/
+results/trash_realtime/

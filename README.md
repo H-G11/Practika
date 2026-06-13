@@ -50,3 +50,42 @@ python src/detect.py data/test/images/000004.jpg
 ```
 
 Результаты сохраняются в `results/predict/`.
+
+## Realtime (webcam)
+
+### 1) Train model (or download weights)
+
+```bash
+python src/train.py
+```
+
+### 2) Run realtime webcam detection
+
+```bash
+python src/realtime.py
+```
+
+Press **Q** or **ESC** to quit (click on the video window first).
+
+---
+
+## Важно
+
+Для полноценного запуска нужно:
+
+1. Скачать датасет с Kaggle
+2. Затем выполнить:
+
+```bash
+python src/coco_to_yolo.py
+```
+
+---
+
+## 4) Закоммитить изменения (только код/README/.gitignore)
+
+```bash
+git add README.md .gitignore src
+git commit -m "Add COCO conversion and realtime webcam detection"
+git push
+```
