@@ -27,7 +27,7 @@ REM Download weights if missing
 if not exist results\trash_coco\weights\best.pt (
   echo Downloading model weights...
   mkdir results\trash_coco\weights 2>nul
-  powershell -Command "Invoke-WebRequest -Uri 'https://github.com/H-G11/Practika/releases/download/v0.1/best.pt' -OutFile 'results\trash_coco\weights\best.pt'"
+  powershell -Command "Invoke-WebRequest -Uri 'https://github.com/H-G11/Practika/releases/download/v0.2/best.pt' -OutFile 'results\trash_coco\weights\best.pt'"
 )
 
 REM Run realtime
