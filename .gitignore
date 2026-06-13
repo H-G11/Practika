@@ -1,0 +1,20 @@
+venv/
+__pycache__/
+*.pyc
+
+# dataset (big)
+data/
+data_raw/
+
+# kaggle secrets
+.kaggle/
+kaggle.json
+
+# ultralytics downloads
+yolov8*.pt
+yolo*.pt
+
+# caches
+runs/
+*.cache
+.ipynb_checkpoints/
