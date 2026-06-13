@@ -18,3 +18,9 @@ yolo*.pt
 runs/
 *.cache
 .ipynb_checkpoints/
+
+# ignore all weights by default
+*.pt
+
+# but keep final best weight
+!results/trash_detector-4/weights/best.pt
