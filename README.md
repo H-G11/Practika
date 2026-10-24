@@ -1,6 +1,5 @@
-[Аудит GitHub-профил.html](https://github.com/user-attachments/files/33903659/GitHub-.html)
 # Practika — Trash Detection (YOLOv8)
-
+<img width="1934" height="1247" alt="1YlCI5ARNq2Hf-GmlRHMi77TaJ29T5Eb638ZW4urLTj9NrH-_s9Vx8t1C9Z0em9dpGmuKJ-fXPZghsUCJNpv6KDn4Cpsn9ZgwqM7ZnJgLGHUA8VV04c1JZ-xB93nGe4-pqzlxVPX3uoalPesIdcZzD55jo-bIsb9NAtlQi1fEU-dz3IJ5VYkZDtZastIOS35" src="https://github.com/user-attachments/assets/db32b09d-8f0e-44f7-a0f6-8d04d3770716" />
 Проект по компьютерному зрению: обучение модели YOLOv8 для обнаружения мусора.
 
 ## Быстрый запуск (Windows)
