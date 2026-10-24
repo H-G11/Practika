@@ -3,12 +3,21 @@
 import argparse
 import hashlib
 import json
+import os
 import platform
 import statistics
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def per_class_metrics(box, names) -> list[dict]:
+    """Only report classes evaluated by the validator; never fill absent classes with mean AP."""
+    return [{'class_id': int(class_id), 'label': names[int(class_id)],
+             'precision': float(box.p[i]), 'recall': float(box.r[i]),
+             'mAP50': float(box.ap50[i]), 'mAP50_95': float(box.ap[i])}
+            for i, class_id in enumerate(box.ap_class_index)]
 
 
 def confusion_counts(matrix: list[list[float]]) -> dict:
@@ -73,14 +82,16 @@ def main(argv=None) -> None:
         report = {'weights_sha256': digest, 'split': args.split, 'imgsz': args.imgsz,
                   'mAP50': float(metrics.box.map50), 'mAP50_95': float(metrics.box.map),
                   'precision': float(metrics.box.mp), 'recall': float(metrics.box.mr),
+                  'per_class': per_class_metrics(metrics.box, getattr(metrics, 'names', model.names)),
                   'confusion_matrix': matrix, 'confusion_counts': confusion_counts(matrix),
                   'confusion_policy': 'Ultralytics validator defaults; matrix rows=prediction, columns=target, background last',
                   'latency': {'scope': 'single-image model.predict including file IO, preprocess and postprocess; no plotting/saving',
                               'conf': args.conf, 'warmup': args.warmup, 'repeats': args.repeats,
                               'median_ms': statistics.median(durations),
+                              'sequential_images_per_second': 1000 / statistics.mean(durations),
                               'p95_ms': sorted(durations)[max(0, int(.95 * len(durations) + .999999) - 1)],
                               'samples_ms': durations},
-                  'hardware': {'platform': platform.platform(), 'processor': platform.processor(),
+                  'hardware': {'platform': platform.platform(), 'processor': platform.processor(), 'logical_cpus': os.cpu_count(),
                                'device': args.device, 'cuda_available': torch.cuda.is_available(),
                                'gpus': [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]},
                   'versions': {'python': platform.python_version(), 'torch': torch.__version__, 'ultralytics': ultralytics.__version__}}

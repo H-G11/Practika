@@ -4,8 +4,8 @@
   "patterns": [
     "test*.py"
   ],
-  "tests_run": 17,
-  "passed": 17,
+  "tests_run": 21,
+  "passed": 21,
   "failures": 0,
   "errors": 0,
   "skipped": 0,

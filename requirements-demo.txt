@@ -1,0 +1,3 @@
+-r requirements.txt
+# Optional local interface; not needed for dataset conversion or CLI inference.
+gradio>=6.0,<7

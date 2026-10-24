@@ -13,3 +13,12 @@ class ConfusionTests(unittest.TestCase):
         for matrix in ([], [[1]], [[1, 2], [3]]):
             with self.subTest(matrix=matrix), self.assertRaises(ValueError):
                 confusion_counts(matrix)
+
+    def test_per_class_report_omits_unevaluated_classes(self):
+        from types import SimpleNamespace
+        from src.evaluate import per_class_metrics
+        box = SimpleNamespace(ap_class_index=[7], p=[.8], r=[.5], ap50=[.7], ap=[.4])
+        rows = per_class_metrics(box, {0: 'absent', 7: 'bottle'})
+        self.assertEqual(1, len(rows))
+        self.assertEqual(7, rows[0]['class_id'])
+        self.assertEqual(.4, rows[0]['mAP50_95'])
