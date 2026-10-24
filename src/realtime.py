@@ -1,35 +1,46 @@
+"""Local webcam inference. Camera and GUI resources are released on errors."""
+
+import argparse
 from pathlib import Path
-import cv2
-from ultralytics import YOLO
 
-def main():
-    print("Realtime started. Click the video window and press Q or ESC to quit.")
-    root = Path(__file__).resolve().parents[1]
-    weights = root / "results" / "trash_coco" / "weights" / "best.pt"
-    if not weights.exists():
-        raise FileNotFoundError(f"Weights not found: {weights}")
 
-    model = YOLO(str(weights))
+def run_camera(model, cv2, *, camera: int, conf: float, imgsz: int, device: str) -> None:
+    cap = cv2.VideoCapture(camera)
+    try:
+        if not cap.isOpened():
+            raise RuntimeError(f"Could not open camera {camera}; select another --camera index")
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                raise RuntimeError("Camera stopped delivering frames")
+            results = model.predict(frame, imgsz=imgsz, conf=conf, device=device, verbose=False)
+            cv2.imshow("Waste detection (Q / ESC to exit)", results[0].plot())
+            if cv2.waitKey(1) & 0xFF in (ord("q"), ord("Q"), 27):
+                break
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
 
-    cap = cv2.VideoCapture(0)  # 0 = встроенная/первая камера
-    if not cap.isOpened():
-        raise RuntimeError("Could not open camera. Try changing VideoCapture(0) to (1)")
 
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--weights", type=Path, required=True)
+    parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--conf", type=float, default=0.4)
+    parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--device", default="cpu")
+    args = parser.parse_args(argv)
+    if not args.weights.is_file() or args.camera < 0 or not 0 < args.conf <= 1 or args.imgsz <= 0:
+        parser.error("Require local weights, camera >= 0, 0 < conf <= 1 and imgsz > 0")
+    try:
+        import cv2
+        from ultralytics import YOLO
 
-        results = model.predict(frame, imgsz=640, conf=0.4, verbose=False)
-        annotated = results[0].plot()
+        run_camera(YOLO(str(args.weights.resolve())), cv2, camera=args.camera,
+                   conf=args.conf, imgsz=args.imgsz, device=args.device)
+    except (ImportError, OSError, RuntimeError, ValueError) as exc:
+        parser.exit(1, f"Webcam inference failed: {exc}\n")
 
-        cv2.imshow("Trash realtime (q/ESC to quit)", annotated)
-        key = cv2.waitKey(1) & 0xFF
-        if key in (ord("q"), ord("Q"), 27):  # 27 = ESC
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()

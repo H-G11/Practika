@@ -1,0 +1,47 @@
+name: verification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.12']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/check_format.py
+      - run: python -m ruff check .
+      - run: python -m compileall -q src tests scripts
+      - run: python src/prepare_dataset.py --help
+      - run: python src/train.py --help
+      - run: python src/detect.py --help
+      - run: python src/realtime.py --help
+      - run: python src/evaluate.py --help
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m pip check
+      - run: python -c "import ultralytics, cv2, torch; print(ultralytics.__version__, cv2.__version__, torch.__version__)"
+      - run: python -m bandit -r src -lll
+      - run: python -m pip_audit --progress-spinner off

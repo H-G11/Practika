@@ -13,8 +13,7 @@ def copy_images_for_split(split: str):
     ensure_dir(images_dir)
 
     if not labels_dir.exists():
-        print(f"[WARN] Нет папки: {labels_dir}")
-        return 0, 0
+        raise FileNotFoundError(labels_dir)
 
     label_files = sorted(labels_dir.glob("*.txt"))
     copied = 0
@@ -39,18 +38,19 @@ def copy_images_for_split(split: str):
         copied += 1
 
     print(f"{split}: labels={len(label_files)} copied_images={copied} missed={missed}")
+    if missed:
+        raise FileNotFoundError(f"{split}: {missed} labels have no matching source image")
     return copied, missed
 
 def main():
-    # train/test точно есть
+    """Legacy label-only layout helper; use coco_to_yolo.py for COCO datasets."""
+    # Existing labels are required; this utility never creates annotations.
     copy_images_for_split("train")
     copy_images_for_split("test")
 
-    # valid может быть пустой — создадим из части train, если надо (следующий шаг)
+    # An absent validation set must be prepared explicitly; do not imply it is ready.
     if not (DATA / "valid" / "labels").exists():
-        ensure_dir(DATA / "valid" / "labels")
-        ensure_dir(DATA / "valid" / "images")
-        print("valid: папка создана (пока пустая)")
+        raise FileNotFoundError("Missing validation labels; use the documented COCO converter")
 
 if __name__ == "__main__":
     main()

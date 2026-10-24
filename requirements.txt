@@ -1,8 +1,6 @@
 ultralytics==8.4.66
-opencv-python==4.8.0.74
-numpy==1.24.0
-matplotlib==3.7.0
-pillow==10.0.0
-tensorboard==2.13.0
-torch==2.0.0
-torchvision==0.15.0
+# Keep the ML stack compatible with Ultralytics; resolve CPU/CUDA wheels for the host.
+# A complete tested lock is pending a network-enabled dependency resolution.
+opencv-python>=4.10,<5
+numpy>=1.26,<3
+torch>=2.6,<3

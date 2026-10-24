@@ -1,134 +1,128 @@
-from pathlib import Path
+"""Convert real COCO boxes to YOLO labels with a reproducible image-level split."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
 import json
+import math
 import random
 import shutil
 from collections import defaultdict
-
-random.seed(42)
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ANN = ROOT / "data" / "data" / "annotations.json"
 
-# ВАЖНО: где лежат изображения из COCO?
-# В твоём датасете часто они лежат в data/data/ или data/ (надо проверить).
-# Сначала попробуем найти автоматически:
-CANDIDATE_IMG_DIRS = [
-    ROOT / "data" / "data",
-    ROOT / "data",
-]
 
-OUT = ROOT / "data_coco_yolo"
+def yolo_bbox(bbox: list[float], w: float, h: float) -> tuple[float, ...]:
+    """Intersect a COCO box with the image, then normalize its corners."""
+    if len(bbox) != 4 or not all(math.isfinite(float(v)) for v in [w, h, *bbox]):
+        raise ValueError("Boxes and image dimensions must be finite numbers")
+    x, y, bw, bh = map(float, bbox)
+    if w <= 0 or h <= 0 or bw <= 0 or bh <= 0:
+        raise ValueError("Image and box dimensions must be positive")
+    left, top = max(0, x), max(0, y)
+    right, bottom = min(w, x + bw), min(h, y + bh)
+    if right <= left or bottom <= top:
+        raise ValueError("Box does not intersect the image")
+    return (left + right) / (2 * w), (top + bottom) / (2 * h), (right - left) / w, (bottom - top) / h
 
-def find_image_dir(file_name: str) -> Path:
-    for d in CANDIDATE_IMG_DIRS:
-        if (d / file_name).exists():
-            return d
-    return None
 
-def yolo_bbox(bbox, w, h):
-    # COCO bbox: [x_min, y_min, width, height] in pixels
-    x, y, bw, bh = bbox
-    xc = (x + bw / 2) / w
-    yc = (y + bh / 2) / h
-    return xc, yc, bw / w, bh / h
+def image_path(directory: Path, name: str) -> Path:
+    relative = Path(name)
+    if relative.is_absolute() or ".." in relative.parts or "\\" in name or ":" in name:
+        raise ValueError("COCO image paths must stay inside images-dir")
+    path = (directory / relative).resolve()
+    if not path.is_relative_to(directory.resolve()) or not path.is_file():
+        raise ValueError(f"Missing or unsafe image: {name}")
+    if path.suffix.lower() not in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
+        raise ValueError(f"Unsupported image extension: {name}")
+    return path
 
-def main():
-    if not ANN.exists():
-        raise FileNotFoundError(ANN)
 
-    data = json.loads(ANN.read_text(encoding="utf-8"))
-
-    images = data["images"]
-    annotations = data["annotations"]
-    categories = sorted(data["categories"], key=lambda c: c["id"])
-
-    # category_id may be non-contiguous; map to 0..nc-1
-    cat_id_to_idx = {c["id"]: i for i, c in enumerate(categories)}
-    names = [c["name"] for c in categories]
-
-    # group annotations by image_id
-    ann_by_image = defaultdict(list)
-    for a in annotations:
-        ann_by_image[a["image_id"]].append(a)
-
-    # filter images that exist on disk and have annotations
-    usable = []
+def convert(annotations: Path, images_dir: Path, output: Path, seed: int = 42) -> dict:
+    annotations, images_dir, output = map(Path, (annotations, images_dir, output))
+    if output.exists() and (not output.is_dir() or any(output.iterdir())):
+        raise ValueError("Output must be absent or empty; existing datasets are never overwritten")
+    if output.resolve().is_relative_to(images_dir.resolve()) or images_dir.resolve().is_relative_to(output.resolve()):
+        raise ValueError("Input images and output directories must not contain each other")
+    raw = annotations.read_bytes()
+    data = json.loads(raw)
+    categories = sorted(data["categories"], key=lambda item: item["id"])
+    images = sorted(data["images"], key=lambda item: item["id"])
+    if not categories or len({c["id"] for c in categories}) != len(categories):
+        raise ValueError("Categories must be nonempty with unique IDs")
+    if any(not isinstance(c["name"], str) or not c["name"].strip() for c in categories):
+        raise ValueError("Every category needs a nonempty name")
+    category_map = {c["id"]: i for i, c in enumerate(categories)}
+    if len(images) < 10 or len({im["id"] for im in images}) != len(images):
+        raise ValueError("Need at least 10 images with unique IDs for an 80/10/10 split")
+    if any(type(im["id"]) is not int or im["id"] < 0 for im in images):
+        raise ValueError("Image IDs must be nonnegative integers")
+    by_id = {im["id"]: im for im in images}
+    labels = defaultdict(list)
+    crowd_skipped = 0
+    for annotation in data["annotations"]:
+        if annotation["image_id"] not in by_id or annotation["category_id"] not in category_map:
+            raise ValueError("Annotation references an unknown image or category")
+        if annotation.get("iscrowd", 0):
+            crowd_skipped += 1
+            continue
+        im = by_id[annotation["image_id"]]
+        box = yolo_bbox(annotation["bbox"], im["width"], im["height"])
+        labels[im["id"]].append(f"{category_map[annotation['category_id']]} " + " ".join(f"{v:.8f}" for v in box))
+    sources = {}
+    digests = set()
+    # Validate all files first. Duplicate images can leak across train/val/test.
     for im in images:
-        file_name = im["file_name"]
-        img_dir = find_image_dir(file_name)
-        if img_dir is None:
-            continue
-        if im["id"] not in ann_by_image:
-            continue
-        usable.append(im)
-
-    print(f"COCO images in json: {len(images)}")
-    print(f"Usable images found on disk with annotations: {len(usable)}")
-    print(f"Classes (nc): {len(names)}")
-
-    # split 80/10/10
-    random.shuffle(usable)
-    n = len(usable)
-    n_train = int(0.8 * n)
-    n_val = int(0.1 * n)
-    splits = {
-        "train": usable[:n_train],
-        "valid": usable[n_train:n_train + n_val],
-        "test": usable[n_train + n_val:],
-    }
-
-    # create folders
-    for s in splits:
-        (OUT / s / "images").mkdir(parents=True, exist_ok=True)
-        (OUT / s / "labels").mkdir(parents=True, exist_ok=True)
-
-    # write files
+        if not all(math.isfinite(float(im[k])) and im[k] > 0 for k in ("width", "height")):
+            raise ValueError("Image dimensions must be positive and finite")
+        path = image_path(images_dir, im["file_name"])
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        if digest in digests:
+            raise ValueError("Duplicate image content; deduplicate the source before splitting")
+        digests.add(digest)
+        sources[im["id"]] = (path, digest)
+    random.Random(seed).shuffle(images)
+    n_train, n_val = int(len(images) * 0.8), int(len(images) * 0.1)
+    splits = {"train": images[:n_train], "valid": images[n_train:n_train + n_val], "test": images[n_train + n_val:]}
+    manifest = {"seed": seed, "annotations_sha256": hashlib.sha256(raw).hexdigest(),
+                "categories": categories, "crowd_annotations_skipped": crowd_skipped, "splits": {}}
+    output.mkdir(parents=True, exist_ok=True)
     for split, items in splits.items():
+        for kind in ("images", "labels"):
+            (output / split / kind).mkdir(parents=True)
+        manifest["splits"][split] = []
         for im in items:
-            file_name = im["file_name"]
-            img_dir = find_image_dir(file_name)
-            src_img = img_dir / file_name
+            source, digest = sources[im["id"]]
+            name = f"{im['id']}{source.suffix.lower()}"
+            shutil.copy2(source, output / split / "images" / name)
+            rows = sorted(labels[im["id"]])
+            (output / split / "labels" / f"{im['id']}.txt").write_text("\n".join(rows) + ("\n" if rows else ""), encoding="utf-8")
+            manifest["splits"][split].append({"id": im["id"], "source": im["file_name"], "sha256": digest, "boxes": len(rows)})
+    # JSON scalars/arrays are valid YAML and safely quote names and Windows paths.
+    config = f"path: {json.dumps(str(output.resolve()))}\ntrain: train/images\nval: valid/images\ntest: test/images\n"
+    config += f"nc: {len(categories)}\nnames: {json.dumps([c['name'] for c in categories], ensure_ascii=False)}\n"
+    (output / "data.yaml").write_text(config, encoding="utf-8")
+    (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return manifest
 
-            dst_img = OUT / split / "images" / Path(file_name).name
-            shutil.copy2(src_img, dst_img)
 
-            w, h = im["width"], im["height"]
-            lines = []
-            for a in ann_by_image[im["id"]]:
-                if a.get("iscrowd", 0) == 1:
-                    continue
-                bbox = a["bbox"]
-                xc, yc, bw, bh = yolo_bbox(bbox, w, h)
-                cls = cat_id_to_idx[a["category_id"]]
-                # clip just in case
-                xc = min(max(xc, 0.0), 1.0)
-                yc = min(max(yc, 0.0), 1.0)
-                bw = min(max(bw, 0.0), 1.0)
-                bh = min(max(bh, 0.0), 1.0)
-                if bw <= 0 or bh <= 0:
-                    continue
-                lines.append(f"{cls} {xc:.6f} {yc:.6f} {bw:.6f} {bh:.6f}")
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--annotations", type=Path, required=True)
+    parser.add_argument("--images-dir", type=Path, required=True)
+    parser.add_argument("--output", type=Path, default=ROOT / "data_coco_yolo")
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args(argv)
+    try:
+        manifest = convert(args.annotations, args.images_dir, args.output, args.seed)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        parser.exit(2, f"Dataset preparation failed: {exc}\n")
+    print(json.dumps({k: len(v) for k, v in manifest["splits"].items()}))
+    print(f"Dataset config: {args.output / 'data.yaml'}")
 
-            (OUT / split / "labels" / f"{dst_img.stem}.txt").write_text(
-                "\n".join(lines) + ("\n" if lines else ""),
-                encoding="utf-8",
-            )
-
-    # write data.yaml for this converted dataset
-    yaml_path = ROOT / "data_coco.yaml"
-    yaml_path.write_text(
-        "path: ./data_coco_yolo\n"
-        "train: train/images\n"
-        "val: valid/images\n"
-        "test: test/images\n\n"
-        f"nc: {len(names)}\n"
-        "names:\n" + "\n".join([f"  - {n}" for n in names]) + "\n",
-        encoding="utf-8",
-    )
-
-    print("Done.")
-    print("Created:", OUT)
-    print("Wrote:", yaml_path)
 
 if __name__ == "__main__":
     main()

@@ -1,30 +1,34 @@
+"""Run inference on a local image using explicitly supplied, trusted weights."""
+
+import argparse
 from pathlib import Path
-import sys
-from ultralytics import YOLO
 
-def main():
-    root = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]
 
-    weights = root / "results" / "trash_coco" / "weights" / "best.pt"
-    if len(sys.argv) >= 2 and sys.argv[1].endswith(".pt"):
-        weights = Path(sys.argv[1])
 
-    if not weights.exists():
-        raise FileNotFoundError(f"Weights not found: {weights}")
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source", type=Path, help="Local image; relative paths use the current directory")
+    parser.add_argument("--weights", type=Path, required=True)
+    parser.add_argument("--conf", type=float, default=0.25)
+    parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--output", type=Path, default=ROOT / "results")
+    args = parser.parse_args(argv)
+    if not args.weights.is_file() or not args.source.is_file():
+        parser.error("Both weights and source must be existing local files")
+    if not 0 < args.conf <= 1 or args.imgsz <= 0:
+        parser.error("Require 0 < conf <= 1 and imgsz > 0")
+    try:
+        from ultralytics import YOLO
 
-    # image path
-    if len(sys.argv) >= 3:
-        source = sys.argv[2]
-    else:
-        test_dir = root / "data_coco_yolo" / "test" / "images"
-        imgs = sorted(test_dir.glob("*.*"))
-        if not imgs:
-            raise FileNotFoundError(f"No images in {test_dir}")
-        source = str(imgs[0])
-        print("Using:", source)
+        model = YOLO(str(args.weights.resolve()))
+        model.predict(source=str(args.source.resolve()), conf=args.conf, imgsz=args.imgsz,
+                      device=args.device, save=True, save_txt=True, save_conf=True,
+                      project=str(args.output.resolve()), name="predict")
+    except (ImportError, OSError, RuntimeError, ValueError) as exc:
+        parser.exit(1, f"Inference failed: {exc}\n")
 
-    model = YOLO(str(weights))
-    model.predict(source=source, conf=0.25, save=True, project=str(root / "results"), name="predict_coco")
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,31 @@
+{
+  "python": "3.14.7",
+  "platform": "Linux-7.2.3-arch1-3-x86_64-with-glibc2.44",
+  "patterns": [
+    "test*.py"
+  ],
+  "tests_run": 17,
+  "passed": 17,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "skips": [],
+  "exceptions": [],
+  "dependencies": {
+    "pip": null,
+    "openpyxl": null,
+    "pydantic": null,
+    "defusedxml": null,
+    "gradio": null,
+    "numpy": null,
+    "av": null,
+    "faster-whisper": null,
+    "piper-tts": null,
+    "ultralytics": null,
+    "torch": null,
+    "ruff": null,
+    "bandit": null,
+    "pip-audit": null
+  },
+  "successful": true
+}

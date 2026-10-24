@@ -1,4 +1,11 @@
 venv/
+.venv/
+.env
+.env.*
+!.env.example
+.ruff_cache/
+.pytest_cache/
+*.log
 __pycache__/
 *.pyc
 
@@ -22,8 +29,7 @@ runs/
 # ignore all weights by default
 *.pt
 
-# but keep final best weight
-!results/trash_detector-4/weights/best.pt
+# Existing historical weights stay in Git; no new weight exceptions.
 
 # converted dataset (very large)
 data_coco_yolo/
@@ -32,3 +38,5 @@ data_coco_yolo/
 results/predict*/
 results/trash_coco/
 results/trash_realtime/
+results/waste_yolov8*/
+results/evaluate*/
